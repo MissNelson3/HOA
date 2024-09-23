@@ -1,0 +1,198 @@
+local plr = game.Players.LocalPlayer
+local Remote = game.ReplicatedStorage.BecomeCharacter
+
+local MainFrame = script.Parent
+local Characters = MainFrame.Characters
+local Part = game.Workspace.CharacterUI:FindFirstChild("Character")
+local TweenService = game:GetService("TweenService")
+local Voicelines = game.ReplicatedStorage.Voicelines
+
+local debounce = false
+local currentCharacter = nil
+local spawnButtonConnection = nil
+
+wait(game.Loaded)
+
+for _, child in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
+	if child:IsA("Tool") then
+		child:Destroy()
+	end
+end
+local function playVoiceline(characterName)
+	local VoicelineCharacter = Voicelines:FindFirstChild(characterName)
+	if VoicelineCharacter and VoicelineCharacter:IsA("Sound") then
+		for _, voice in pairs(Voicelines:GetChildren()) do
+			if voice:IsA("Sound") and voice.Playing then
+				voice:Stop()
+			end
+		end
+		wait()
+		VoicelineCharacter:Play()
+	end
+end
+
+local function showCharacter(character)
+	local selectedCharacter = game.ReplicatedStorage.CharacterUI:FindFirstChild(character):Clone()
+	if selectedCharacter then
+		-- Set all parts to invisible (transparency = 1)
+		for _, part in pairs(selectedCharacter:GetDescendants()) do
+			if part:IsA("Part") or part:IsA("MeshPart") then
+				part.Transparency = 1
+			end
+		end
+
+		-- Tween parts to make them visible
+		for _, part in pairs(selectedCharacter:GetDescendants()) do
+			if (part:IsA("Part") or part:IsA("MeshPart")) and part.Name ~= "HumanoidRootPart" then
+				local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Elastic, Enum.EasingDirection.In)
+				local goal = {Transparency = 0}
+				local tween = TweenService:Create(part, tweenInfo, goal)
+				tween:Play()
+			end
+		end
+
+		selectedCharacter.Parent = game.Workspace
+		wait(1)
+		local Root = selectedCharacter:FindFirstChild("HumanoidRootPart")
+		if selectedCharacter and Root then
+			Root.Position = Part.Position
+		end
+		selectedCharacter.Name = "ABCDEFG" -- Change this to a unique identifier if necessary
+	end
+end
+
+local function updateCamera()
+	local camera = game.Workspace.CurrentCamera
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.CFrame = game.Workspace.CharacterUI.Cam.CFrame
+	camera.FieldOfView = 70
+	wait()
+	local goal = {FieldOfView = 50}
+	local tweenInfo = TweenInfo.new(2, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(camera, tweenInfo, goal)
+	tween:Play()
+end
+
+local function updateUI(characterName)
+	local NameDisplay = MainFrame.CharacterInfo:FindFirstChild("CharacterName")
+	local CharacterInfo = MainFrame.CharacterInfo:FindFirstChild("CharacterDescription")
+	local Character = game:GetService("ReplicatedStorage").CharacterUI:FindFirstChild(characterName)
+	local Description = Character:FindFirstChild("Description")
+	local Name = Character:FindFirstChild("Name")
+	if Description and Name then
+		NameDisplay.Text = Name.Value
+		CharacterInfo.Text = Description.Value
+		MainFrame.CharacterInfo.Visible = true
+
+		local Smoke = game.Workspace.CharacterUI:FindFirstChild("SmokePart").ParticleEmitter
+		Smoke.Enabled = true
+
+		MainFrame.Spawn.Visible = true
+	end
+end
+
+local function onCharacterSelected(char)
+	-- Allow selecting characters again by resetting debounce
+	if debounce then return end
+	debounce = true
+
+
+	local existingCharacter = game.Workspace.CharacterUI:FindFirstChild("ABCDEFG")
+	if existingCharacter then
+
+		existingCharacter:Destroy() -- Destroy the previous character if it exists
+	end
+
+	playVoiceline(char.Name)
+	showCharacter(char.Name)
+	updateCamera()
+	updateUI(char.Name)
+
+	currentCharacter = char.Name
+
+	-- Allow the debounce to reset after a short delay
+	wait(0.5)
+	debounce = false 
+end
+
+local TweenService = game:GetService("TweenService")
+
+local function onSpawnButtonPressed()
+	if not currentCharacter then return end
+
+	if game:GetService("ReplicatedStorage").CharacterUI.TakenCharacters:FindFirstChild(currentCharacter) then
+		return
+	end
+	local BlackFrame = script.Parent.Parent.Black
+	local DesiredTransparency = 0
+	local DesiredReturnTransparency = 1
+	local tweenInfo = TweenInfo.new(
+		1.2, 
+		Enum.EasingStyle.Quad, 
+		Enum.EasingDirection.Out, 
+		0, 
+		false, 
+		0 
+	)
+	local goal = {}
+	goal.BackgroundTransparency = DesiredTransparency
+	-- Create the tween
+	local BlackBackroundTransparencyTween = TweenService:Create(BlackFrame, tweenInfo, goal)
+
+
+	BlackBackroundTransparencyTween:Play()
+	wait(1.5)
+
+	Remote:FireServer(currentCharacter, plr)
+
+	local BlackFrame = script.Parent.Parent.Black
+	local DesiredTransparency = 0
+	local DesiredReturnTransparency = 1
+	local tweenInfo = TweenInfo.new(
+		1.2, 
+		Enum.EasingStyle.Quad, 
+		Enum.EasingDirection.Out, 
+		0, 
+		false, 
+		0 
+	)
+	local goal = {}
+	goal.BackgroundTransparency = DesiredReturnTransparency
+	-- Create the tween
+	local BlackBackroundTransparencyTweenReturn = TweenService:Create(BlackFrame, tweenInfo, goal)
+	MainFrame.Visible = false
+	BlackBackroundTransparencyTweenReturn:Play()
+	BlackBackroundTransparencyTweenReturn.Completed:Connect(function()
+		script.Parent.Parent:Destroy()
+	end)
+end
+
+
+local function initialize()
+	for _, char in pairs(Characters:GetChildren()) do
+		if char:IsA("ImageButton") then
+			char.MouseButton1Down:Connect(function()
+				onCharacterSelected(char)
+			end)
+		end
+	end
+
+	local SpawnButton = MainFrame:FindFirstChild("Spawn")
+	if SpawnButton then
+		if spawnButtonConnection then
+			spawnButtonConnection:Disconnect()
+		end
+		spawnButtonConnection = SpawnButton.MouseButton1Down:Connect(onSpawnButtonPressed)
+	else
+		warn("Spawn button not found")
+	end
+end
+
+game.ReplicatedStorage.UpdateSelection.OnClientEvent:Connect(function()
+	task.wait(1)
+	local Camera = game.Workspace.CurrentCamera
+	Camera.CameraType = Enum.CameraType.Scriptable
+	Camera.CFrame = game:GetService("Workspace").CharacterUI:FindFirstChild("Cam").CFrame
+	--updateCamera() -- Ensure camera is set to the correct position when the player joins
+	initialize()
+end)
